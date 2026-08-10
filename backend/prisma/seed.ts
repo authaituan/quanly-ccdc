@@ -31,6 +31,10 @@ const categories: { code: string; name: string; group: AssetCategoryGroup; isRac
   { code: 'PRINTER', name: 'Máy in', group: 'END_USER', isRackable: false },
   { code: 'SCANNER', name: 'Máy quét (Scanner)', group: 'END_USER', isRackable: false },
   { code: 'IP_PHONE', name: 'Điện thoại IP (IP Phone)', group: 'END_USER', isRackable: false },
+  // Placeholder cho các dòng import từ Book1.xlsx thiếu "Loại máy" hoặc ghi
+  // "Không có máy tính" nhưng vẫn có dữ liệu asset khác (IP...) - xem
+  // backend/prisma/import-book1.ts. Người dùng tự phân loại lại sau.
+  { code: 'UNCLASSIFIED', name: 'Chưa phân loại', group: 'END_USER', isRackable: false },
 
   // Thiết bị Giám sát & An ninh
   { code: 'NVR_DVR', name: 'NVR/DVR (Đầu ghi hình)', group: 'SURVEILLANCE_SECURITY', isRackable: true },

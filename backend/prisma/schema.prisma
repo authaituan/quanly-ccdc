@@ -54,6 +54,17 @@ model Site {
   address      String?
   regionName   String? // matches "Tên BĐKV" - regional postal office grouping
   hasServerRoom Boolean @default(false)
+
+  // Added 2026-08-10 for Book1.xlsx (Merge1) import - fields with no prior
+  // home in this model. See backend/prisma/import-book1.ts.
+  provinceCode     String? // Mã BĐT/TP
+  provinceName     String? // Tên BĐT/TP
+  regionCode       String? // Mã BĐKV
+  wardCode         String? // Mã BĐX
+  wardName         String? // Tên Bưu điện xã
+  centralWardName  String? // Bưu điện xã trung tâm
+  pointType        String? // Loại (GD3/VHX/GD1/VP/GD2/PH2/PH1)
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -135,6 +146,7 @@ model ItAsset {
   purchaseDate        DateTime?
   purchaseCost        Decimal?          @db.Decimal(14, 2)
   notes               String?
+  currentUser         String? // Người sử dụng - added 2026-08-10 for Book1.xlsx import
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 
