@@ -10,9 +10,9 @@
 ```yaml
 repo: authaituan/quanly-ccdc
 branch: feature/scaffold-phase1
-commit_hash: d4a6484d7efad38b8c67ebbfdc27dfec2423b7dc
-commit_date: 2026-08-10T22:02:03+07:00
-audit_date: 2026-08-10T22:35:00+07:00
+commit_hash: b7ce63b265720e1a6ebd187302b36d59a4dedafb
+commit_date: 2026-08-10T22:26:07+07:00
+audit_date: 2026-08-10T22:45:00+07:00
 auditor: Claude (Technical Auditor role, per project operating constitution)
 ```
 
@@ -49,7 +49,7 @@ auditor: Claude (Technical Auditor role, per project operating constitution)
 | **Module `auth` (JWT/RolesGuard)** | ✅ **Đã hoàn thành** | `backend/src/modules/auth/`: `auth.module.ts`, `auth.controller.ts`, `auth.service.ts`, `jwt.strategy.ts`, `jwt-auth.guard.ts`, `roles.guard.ts`, `roles.decorator.ts`, `dto/login.dto.ts`. Import vào `app.module.ts`. |
 | Module `assignments`, `maintenance`, `software-licenses`, `users` | ❌ Chưa tồn tại (chỉ có model DB, chưa có controller/service) | Không có thư mục tương ứng trong `backend/src/modules/`; các model `EndUserAssignment`, `MaintenanceLog`, `SoftwareLicenseLink`, `User` chỉ tồn tại ở tầng schema |
 | Frontend — routing skeleton | ⚠️ `/assets` có trang thật, `/`, `/sites`, `/scan` vẫn placeholder | `frontend/src/App.tsx` |
-| **FE-02 — Trang danh sách thiết bị (`/assets`)** | ✅ Hoạt động lại bình thường (đã sửa ở FE-03) | `frontend/src/pages/AssetsPage.tsx` giờ đính `Authorization: Bearer <token>` vào request, xem FE-03 bên dưới. |
+| **FE-02 — Trang danh sách thiết bị (`/assets`)** | ✅ Hoạt động bình thường + đã bổ sung field Site thiếu (2026-08-10) | `frontend/src/pages/AssetsPage.tsx` đính `Authorization: Bearer <token>` (FE-03). **Audit riêng (2026-08-10)** phát hiện `interface Site` chỉ khai báo `{code, name}` dù API trả đủ 8 field — 7 field (`provinceCode`, `provinceName`, `regionCode`, `wardCode`, `centralWardName`, `pointType`, `wardName`) giờ hiển thị ở **bảng chính**, `address` hiển thị ở **"Chi tiết"**. Verify thật qua browser: đủ 7 cột mới, 0 lỗi console. Không phát hiện lỗi import nào (đối chiếu số liệu DB khớp 100% với audit Excel gốc trước đó). |
 | **FE-03 — Trang đăng nhập + đính JWT + RequireAuth** | ✅ **Đã hoàn thành**, verify runtime thật đầy đủ (5 kịch bản a-e) | `frontend/src/pages/LoginPage.tsx` (form email/password, gọi `POST /auth/login`, lưu session, redirect `/assets`); `frontend/src/lib/auth.ts` (`getToken`/`getUser`/`setSession`/`clearSession`/`isAuthenticated` - dùng localStorage, xem nợ kỹ thuật #8 bên dưới); `frontend/src/components/RequireAuth.tsx` (check token trước khi render, redirect `/login` ngay nếu thiếu - không đợi 401); `AssetsPage.tsx` sửa: đính JWT vào `fetch`, 401 → `clearSession()` + redirect `/login`; hiện `fullName (role)` + nút "Đăng xuất" ở góc trên. `App.tsx` thêm route `/login`, bọc `/assets` bằng `<RequireAuth>`. Verify thật qua browser thật (không phải curl): (a) mở `/assets` chưa đăng nhập → redirect `/login` ngay, không nháy nội dung; (b) sai password → hiện đúng message backend; (c) đúng (IT_ADMIN đã seed) → redirect `/assets`, 359/359 thiết bị, hiện đúng "IT Admin (seed) (IT_ADMIN)"; (d) đăng xuất → token bị xóa thật (`localStorage` = null), mở lại `/assets` bằng URL → redirect `/login` lại; (e) mở `/login` khi đã có token → tự redirect `/assets`. Console 0 lỗi (tab sạch). `vite build` pass 0 lỗi. |
 | **Bug có sẵn từ scaffold, phát hiện+sửa ở FE-02** | ✅ Đã sửa | `frontend/src/main.tsx` thiếu `<BrowserRouter>` — mọi route (không riêng `/assets`) crash ngay khi mount trước khi sửa. Đã bọc `<App />` trong `<BrowserRouter>`. |
 | Frontend — Rack visualizer tương tác | ❌ Chưa code | Không tìm thấy component nào tên rack/visualizer trong `frontend/src/` |
