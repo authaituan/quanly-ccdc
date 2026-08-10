@@ -10,9 +10,9 @@
 ```yaml
 repo: authaituan/quanly-ccdc
 branch: feature/scaffold-phase1
-commit_hash: 749615e4e5b42ea8cdaff8c9ef3bc4c60cc2706b
-commit_date: 2026-08-10T15:54:29+07:00
-audit_date: 2026-08-10T16:00:00+07:00
+commit_hash: 2ad8953650dd6ab9aeb1cc1c8a44b4dd177b8c2f
+commit_date: 2026-08-10T17:10:32+07:00
+audit_date: 2026-08-10T17:20:00+07:00
 auditor: Claude (Technical Auditor role, per project operating constitution)
 ```
 
@@ -22,17 +22,21 @@ auditor: Claude (Technical Auditor role, per project operating constitution)
 |---|---|---|
 | 1. Runtime | `npm run start:dev` chưa được chạy thành công trong bất kỳ phiên nào — **không có bằng chứng runtime**. Chỉ có `npx nest build` (compile-time) đã pass. | Chưa audit được |
 | 2. Database | PostgreSQL 17 local (`postgresql-x64-17` service), DB `quanly_ccdc` | Đã audit thật — xem bảng bên dưới |
-| 3. Source code GitHub | Nhánh `feature/scaffold-phase1`, commit `749615e` | Đã audit thật — xem bảng bên dưới |
-| 4. Commit history | 2 commit: `ba91f3e` (scaffold), `749615e` (fix build error) | Đã đọc |
+| 3. Source code GitHub | Nhánh `feature/scaffold-phase1`, commit `2ad8953` | Đã audit thật — xem bảng bên dưới |
+| 4. Commit history | 4 commit: `ba91f3e` (scaffold), `749615e` (fix build error), `291b277` (PROJECT_STATUS.md), `2ad8953` (import Book1.xlsx) | Đã đọc |
 | 5. Prompt mô tả | Chat trước đó | Thấp nhất, không dùng làm evidence |
 
 ## Bảng tiến độ
 
 | Hạng mục | Trạng thái | Evidence (file:dòng) |
 |---|---|---|
-| Data model Prisma đầy đủ (18 model/enum) | ✅ Có, đã migrate | `backend/prisma/schema.prisma` — 12 model + 6 enum: `AssetCategoryGroup`(22), `AssetCategory`(30), `Site`(50), `RackCabinet`(71), `RackPlacement`(86), `OperatingStatus`(105), `OwnershipStatus`(113), `ItAsset`(119), `Department`(157), `Employee`(170), `AssignmentStatus`(189), `EndUserAssignment`(195), `MaintenanceType`(221), `MaintenanceLog`(229), `SoftwareLicenseLink`(249), `NetworkAccessCredential`(269), `UserRole`(287), `User`(294) |
-| Migration áp dụng vào DB thật | ✅ Đã chạy | `backend/prisma/migrations/20260810085140_init/` tồn tại; xác nhận bằng `psql \dt` trong phiên trước → 12 bảng nghiệp vụ + `_prisma_migrations` có thật trong `quanly_ccdc`. Re-verify lần 2 bằng `npx prisma migrate status` (2026-08-10, phiên hiện tại) → output thật: "1 migration found in prisma/migrations", "Database schema is up to date!" |
-| Seed taxonomy 28 category | ✅ Đã chạy | `backend/prisma/seed.ts`; output thật "Seeded 28 asset categories" |
+| Data model Prisma đầy đủ (18 model/enum) | ✅ Có, đã migrate | `backend/prisma/schema.prisma` — 12 model + 6 enum: `AssetCategoryGroup`(22), `AssetCategory`(30), `Site`(50, +7 field mới - xem OPS-02 bên dưới), `RackCabinet`(71), `RackPlacement`(86), `OperatingStatus`(105), `OwnershipStatus`(113), `ItAsset`(119, +`currentUser`), `Department`(157), `Employee`(170), `AssignmentStatus`(189), `EndUserAssignment`(195), `MaintenanceType`(221), `MaintenanceLog`(229), `SoftwareLicenseLink`(249), `NetworkAccessCredential`(269), `UserRole`(287), `User`(294) |
+| `Site` — 7 field mới (Book1.xlsx import) | ✅ Đã migrate + có dữ liệu thật | `backend/prisma/schema.prisma:60-67`: `provinceCode`, `provinceName`, `regionCode`, `wardCode`, `wardName`, `centralWardName`, `pointType` (tất cả `String?`). Migration `backend/prisma/migrations/20260810094730_add_book1_import_fields/migration.sql`. Xác nhận `\d sites` thật có đủ 7 cột. Mẫu dữ liệu thật: site `536750` → `provinceCode='53'`, `regionCode='5310'`, `pointType='GD3'` |
+| `ItAsset.currentUser` | ✅ Đã migrate + có dữ liệu thật | `backend/prisma/schema.prisma:149`. Query thật: `SELECT count(*) FROM it_assets WHERE "currentUser" IS NOT NULL` → 99 |
+| `AssetCategory.UNCLASSIFIED` | ✅ Đã seed | `backend/prisma/seed.ts` — group `END_USER`, dùng cho 73 dòng Book1.xlsx thiếu "Loại máy" hoặc ghi "Không có máy tính" |
+| Migration áp dụng vào DB thật | ✅ Đã chạy (2 migration) | `backend/prisma/migrations/`: `20260810085140_init`, `20260810094730_add_book1_import_fields`. Re-verify `npx prisma migrate status` → "Database schema is up to date!" |
+| Seed taxonomy | ✅ Đã chạy | `backend/prisma/seed.ts`; output thật "Seeded 29 asset categories" (28 gốc + `UNCLASSIFIED`). Query thật `SELECT count(*) FROM asset_categories` → 29 |
+| **OPS-02 — Import Book1.xlsx (Merge1) vào DB** | ✅ **Đã hoàn thành** | Script: `backend/prisma/import-book1.ts` (dry-run mặc định, `--commit` để ghi thật). Kết quả thật (query `psql` độc lập, không chỉ dựa vào log script): `SELECT count(*) FROM sites` → **206**; `SELECT count(*) FROM it_assets` → **359**; theo category: `PC_DESKTOP`=286, `UNCLASSIFIED`=73; `serialNumber` distinct=non-null=255 (không trùng); `network_access_credentials` = 0 dòng (xem rủi ro #4 bên dưới). Commit `2ad8953`. |
 | Module `assets` — 5 route | ✅ Có code, ❌ chưa test runtime | `backend/src/modules/assets/assets.controller.ts`: `GET /assets`(9), `GET /assets/expiring-soon`(14), `GET /assets/by-tag/:assetTag`(19), `GET /assets/:id`(25), `POST /assets`(30) |
 | Module `sites` — 2 route | ✅ Có code, ❌ chưa test runtime | `backend/src/modules/sites/sites.controller.ts`: `GET /sites`(8), `GET /sites/:id`(13) |
 | Module `credentials` — mã hóa VPN/FortiClient | ⚠️ Service xong, **không có route HTTP** | `backend/src/modules/credentials/credentials.service.ts`: `upsert()`(28), `reveal()`(54); `backend/src/modules/credentials/credentials.module.ts` — không import `AssetsController`-style controller, comment dòng 6-8 giải thích lý do (chờ module `auth`) |
@@ -43,7 +47,6 @@ auditor: Claude (Technical Auditor role, per project operating constitution)
 | Frontend — Rack visualizer tương tác | ❌ Chưa code | Không tìm thấy component nào tên rack/visualizer trong `frontend/src/` |
 | Frontend — QR scan mobile-web | ❌ Chưa code | Route `/scan` chỉ là `PlaceholderPage`, không có logic camera/decode |
 | Offboarding/decommission state machine | ❌ Chưa code | `EndUserAssignment.status` enum có `OFFBOARDING`(schema.prisma:189-193) nhưng không có service/controller nào implement luồng thu hồi → backup → wipe → license → kho |
-| Import dữ liệu từ Book1.xlsx | ❌ Chưa có script | Không có file import/migration script nào tham chiếu `Book1.xlsx` trong repo |
 | Build backend (`nest build`) | ✅ Pass, 0 lỗi | Chạy thật trong phiên trước; log không có output lỗi sau khi sửa `assets.service.ts` (cast `Prisma.InputJsonValue`) |
 | Build frontend (`vite build`) | ✅ Pass, 0 lỗi | Output thật: `dist/index.html`, `dist/assets/index-BTeJBiAA.js` (160.89 kB) |
 | Server chạy được qua HTTP (runtime thật) | ❓ **Không kết luận được** | Chưa từng chạy `npm run start:dev` thành công trong phiên nào — sandbox chặn spawn tiến trình nền. Không được coi build-pass tương đương với "server chạy đúng" |
@@ -52,4 +55,6 @@ auditor: Claude (Technical Auditor role, per project operating constitution)
 
 1. **`credentials` module không có route** — nếu ai đó cần API thật cho VPN/FortiClient, phải làm `auth` module trước (RolesGuard chặn non-`IT_ADMIN`), nếu không sẽ có người thêm controller vội mà bỏ qua RBAC.
 2. **Chưa có bằng chứng runtime nào** — mọi xác nhận "hoạt động" trong project này tới nay đều dừng ở compile-time/migration-time, chưa có request/response HTTP thật nào được quan sát.
-3. **Book1.xlsx (359 dòng dữ liệu thật)** chưa được import — `IT_Asset`/`Site` trong DB hiện đang rỗng dữ liệu thật, chỉ có 28 dòng taxonomy seed.
+3. **4 cột User VPN / Password VPN / User FortiClient / Password FortiClient trong Book1.xlsx bị bỏ qua hoàn toàn khi import (quyết định có chủ đích, đã duyệt 2026-08-10)** — `import-book1.ts` không đọc, không lưu 4 cột này dưới bất kỳ hình thức nào (xác nhận thật: `network_access_credentials` = 0 dòng). Dữ liệu VPN/FortiClient thật của 359 thiết bị **hiện không tồn tại ở đâu trong hệ thống mới** — nếu cần, phải nhập tay hoặc chạy 1 script import riêng sau khi module `auth` xong.
+4. **Cột "Loại" (GD3/VHX/GD1/VP/GD2/PH2/PH1) và các field site khác vẫn cần dọn tay** — `Site.pointType`, `wardCode`, `wardName`, `centralWardName` được import nguyên trạng từ Excel, chưa chuẩn hóa/đối chiếu nghiệp vụ. Riêng site `531130` (VP BĐ Thành Phố Huế) có `wardName = NULL` do xung đột dữ liệu thật (cột này ở site đó bị dùng để ghi tên phòng ban nội bộ, không phải tên xã) — cần xử lý tay nếu muốn có dữ liệu phòng ban.
+5. **73/359 `ItAsset` đang mang category `UNCLASSIFIED`** (thiếu "Loại máy" hoặc ghi "Không có máy tính" trong Excel gốc) — cần người dùng tự phân loại lại thủ công sau.
