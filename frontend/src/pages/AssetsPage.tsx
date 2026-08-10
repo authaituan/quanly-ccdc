@@ -29,6 +29,14 @@ interface AssetCategory {
 interface Site {
   code: string;
   name: string;
+  address: string | null;
+  provinceCode: string | null;
+  provinceName: string | null;
+  regionCode: string | null;
+  wardCode: string | null;
+  wardName: string | null;
+  centralWardName: string | null;
+  pointType: string | null;
 }
 
 interface ItAssetDto {
@@ -164,6 +172,13 @@ export default function AssetsPage() {
                 <th style={{ padding: 8 }}>Bưu cục</th>
                 <th style={{ padding: 8 }}>Tình trạng</th>
                 <th style={{ padding: 8 }}>IP</th>
+                <th style={{ padding: 8 }}>Mã BĐT/TP</th>
+                <th style={{ padding: 8 }}>Tên BĐT/TP</th>
+                <th style={{ padding: 8 }}>Mã BĐKV</th>
+                <th style={{ padding: 8 }}>Mã BĐX</th>
+                <th style={{ padding: 8 }}>Bưu điện xã trung tâm</th>
+                <th style={{ padding: 8 }}>Loại điểm</th>
+                <th style={{ padding: 8 }}>Tên Bưu điện xã</th>
                 <th style={{ padding: 8 }}></th>
               </tr>
             </thead>
@@ -177,6 +192,13 @@ export default function AssetsPage() {
                     <td style={{ padding: 8 }}>{a.site?.name ?? '-'}</td>
                     <td style={{ padding: 8 }}>{OPERATING_STATUS_LABEL[a.operatingStatus] ?? a.operatingStatus}</td>
                     <td style={{ padding: 8, fontFamily: 'monospace' }}>{a.ipAddress ?? '-'}</td>
+                    <td style={{ padding: 8 }}>{a.site?.provinceCode ?? '-'}</td>
+                    <td style={{ padding: 8 }}>{a.site?.provinceName ?? '-'}</td>
+                    <td style={{ padding: 8 }}>{a.site?.regionCode ?? '-'}</td>
+                    <td style={{ padding: 8 }}>{a.site?.wardCode ?? '-'}</td>
+                    <td style={{ padding: 8 }}>{a.site?.centralWardName ?? '-'}</td>
+                    <td style={{ padding: 8 }}>{a.site?.pointType ?? '-'}</td>
+                    <td style={{ padding: 8 }}>{a.site?.wardName ?? '-'}</td>
                     <td style={{ padding: 8 }}>
                       <button onClick={() => setExpandedId(expandedId === a.id ? null : a.id)}>
                         {expandedId === a.id ? 'Ẩn' : 'Chi tiết'}
@@ -185,7 +207,7 @@ export default function AssetsPage() {
                   </tr>
                   {expandedId === a.id && (
                     <tr key={`${a.id}-detail`} style={{ background: '#fafafa' }}>
-                      <td colSpan={7} style={{ padding: 12 }}>
+                      <td colSpan={14} style={{ padding: 12 }}>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, fontSize: 14 }}>
                           <div>
                             <strong>Hãng / Model:</strong> {a.manufacturer ?? '-'} / {a.model ?? '-'}
@@ -201,6 +223,9 @@ export default function AssetsPage() {
                           </div>
                           <div>
                             <strong>Sở hữu:</strong> {a.ownershipStatus}
+                          </div>
+                          <div>
+                            <strong>Địa chỉ bưu cục:</strong> {a.site?.address ?? '-'}
                           </div>
                           {a.specs && (
                             <div style={{ gridColumn: '1 / -1' }}>
