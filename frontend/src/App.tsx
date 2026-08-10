@@ -1,10 +1,10 @@
 /**
- * Phase 1 scaffold shell. Real pages (Asset list, Rack visualizer, QR
- * scanner, Lifecycle dashboard) land in a follow-up phase per the
- * "one phase per chat" rule - this only proves the routing skeleton
- * against the planned IA.
+ * Phase 1 scaffold shell. Route /assets có trang thật (FE-02, xem
+ * frontend/src/pages/AssetsPage.tsx). Các route còn lại (/, /sites, /scan)
+ * vẫn placeholder - ngoài phạm vi phase này ("1 phase 1 module").
  */
 import { Routes, Route, Link } from 'react-router-dom';
+import AssetsPage from './pages/AssetsPage';
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -26,7 +26,7 @@ export default function App() {
       </nav>
       <Routes>
         <Route path="/" element={<PlaceholderPage title="Dashboard vòng đời & hạn hợp đồng" />} />
-        <Route path="/assets" element={<PlaceholderPage title="Danh sách thiết bị CNTT" />} />
+        <Route path="/assets" element={<AssetsPage />} />
         <Route path="/sites" element={<PlaceholderPage title="Sơ đồ vị trí & Rack" />} />
         <Route path="/scan" element={<PlaceholderPage title="Quét QR tra cứu thiết bị" />} />
       </Routes>
