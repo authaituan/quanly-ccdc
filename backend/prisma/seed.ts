@@ -1,8 +1,14 @@
 /**
  * Seeds AssetCategory with the taxonomy locked in by the user on 2026-08-10.
+ * Also seeds the first IT_ADMIN account (AUTH-01, 2026-08-10) so someone
+ * can log in at all - but ONLY when the users table is empty, and ONLY if
+ * SEED_ADMIN_EMAIL/SEED_ADMIN_PASSWORD are set in the environment. No
+ * hardcoded fallback password, no auto-generated password printed to a
+ * log - both would be a real credential leak.
  * Run with: npx prisma db seed
  */
-import { PrismaClient, AssetCategoryGroup } from '@prisma/client';
+import { PrismaClient, AssetCategoryGroup, UserRole } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
@@ -50,7 +56,7 @@ const categories: { code: string; name: string; group: AssetCategoryGroup; isRac
   { code: 'SPARE_PART', name: 'Linh kiện thay thế (RAM, SSD, PSU)', group: 'AUXILIARY_CONSUMABLE', isRackable: false },
 ];
 
-async function main() {
+async function seedCategories() {
   for (const c of categories) {
     await prisma.assetCategory.upsert({
       where: { code: c.code },
@@ -59,6 +65,41 @@ async function main() {
     });
   }
   console.log(`Seeded ${categories.length} asset categories.`);
+}
+
+async function seedFirstAdmin() {
+  const existingCount = await prisma.user.count();
+  if (existingCount > 0) {
+    console.log(`users table already has ${existingCount} row(s) - skipping admin seed.`);
+    return;
+  }
+
+  const email = process.env.SEED_ADMIN_EMAIL;
+  const password = process.env.SEED_ADMIN_PASSWORD;
+  if (!email || !password) {
+    throw new Error(
+      'users table is empty and SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD are not set. ' +
+        'Refusing to seed an admin account without them - set both in backend/.env ' +
+        '(see .env.example) and re-run `npx prisma db seed`. Not auto-generating a ' +
+        'password, since that would end up printed in a log somewhere.',
+    );
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  await prisma.user.create({
+    data: {
+      email,
+      passwordHash,
+      fullName: 'IT Admin (seed)',
+      role: UserRole.IT_ADMIN,
+    },
+  });
+  console.log(`Seeded first IT_ADMIN account: ${email}`);
+}
+
+async function main() {
+  await seedCategories();
+  await seedFirstAdmin();
 }
 
 main()
