@@ -33,10 +33,27 @@ interface Site {
   provinceCode: string | null;
   provinceName: string | null;
   regionCode: string | null;
+  regionName: string | null;
   wardCode: string | null;
   wardName: string | null;
   centralWardName: string | null;
   pointType: string | null;
+}
+
+interface CredentialsDto {
+  vpnUsername: string | null;
+  vpnPassword: string | null;
+  fortiClientUsername: string | null;
+  fortiClientPassword: string | null;
+}
+
+const NOTES_TEN_MAY_PREFIX = 'Tên máy (nguồn Book1.xlsx): ';
+
+// BE-01/AST-import: notes lưu cố định dạng "Tên máy (nguồn Book1.xlsx): <ten>"
+// (xem import-book1.ts) - cắt tiền tố để lấy đúng "Tên máy" gốc từ Excel.
+function extractTenMay(notes: string | null): string {
+  if (!notes) return '-';
+  return notes.startsWith(NOTES_TEN_MAY_PREFIX) ? notes.slice(NOTES_TEN_MAY_PREFIX.length) : notes;
 }
 
 interface ItAssetDto {
@@ -62,24 +79,68 @@ type LoadState =
   | { status: 'error'; message: string }
   | { status: 'ready'; assets: ItAssetDto[] };
 
-const OPERATING_STATUS_LABEL: Record<string, string> = {
-  IN_STOCK: 'Dự phòng trong kho',
-  PRODUCTION: 'Đang chạy',
-  MAINTENANCE: 'Đang bảo trì/Sửa chữa',
-  FAULTY: 'Lỗi/Báo hỏng',
-  DECOMMISSIONED: 'Thanh lý',
-};
+// Cột "Tình trạng" (operatingStatus) và "Ngày cấp" cố ý KHÔNG hiển thị ở
+// đâu trong phase này - không thuộc danh sách cột đã chốt (thứ tự theo
+// Book1.xlsx gốc), và "Ngày cấp" vốn không được import vào DB. Nợ kỹ
+// thuật đã biết, để phase khác quyết định có cần hiển thị lại không.
+
+type CredState =
+  | { status: 'loading' }
+  | { status: 'none' } // asset chưa có NetworkAccessCredential nào (body rỗng, xem audit)
+  | { status: 'ready'; data: CredentialsDto }
+  | { status: 'error'; message: string };
 
 export default function AssetsPage() {
   const navigate = useNavigate();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [query, setQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // CRED-04 (phương án A): chỉ IT_ADMIN mới lazy-load VPN/Forti, chỉ khi
+  // mở rộng đúng dòng đó - không gọi trước cho toàn bộ danh sách.
+  const [credState, setCredState] = useState<CredState | null>(null);
   const user = getUser();
+  const isItAdmin = user?.role === 'IT_ADMIN';
 
   function handleLogout() {
     clearSession();
     navigate('/login', { replace: true });
+  }
+
+  async function toggleExpand(assetId: string) {
+    if (expandedId === assetId) {
+      setExpandedId(null);
+      setCredState(null);
+      return;
+    }
+    setExpandedId(assetId);
+    setCredState(null);
+    if (!isItAdmin) return; // role khác IT_ADMIN: không gọi API credentials, không hiện Nhóm B
+
+    setCredState({ status: 'loading' });
+    try {
+      const res = await fetch(`${API_BASE}/assets/${assetId}/credentials`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (res.status === 401) {
+        clearSession();
+        navigate('/login', { replace: true });
+        return;
+      }
+      if (!res.ok) throw new Error(`Backend trả về HTTP ${res.status}`);
+      // Audit thật (2026-08-10): khi asset chưa có credential nào, backend
+      // trả body RỖNG (Content-Length: 0), không phải chuỗi JSON "null" -
+      // res.json() trên body rỗng sẽ throw. Đọc text trước để xử lý đúng.
+      const text = await res.text();
+      if (!text) {
+        setCredState({ status: 'none' });
+        return;
+      }
+      const data = JSON.parse(text) as CredentialsDto;
+      setCredState({ status: 'ready', data });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi không xác định';
+      setCredState({ status: 'error', message });
+    }
   }
 
   useEffect(() => {
@@ -167,18 +228,19 @@ export default function AssetsPage() {
             <thead>
               <tr style={{ textAlign: 'left', borderBottom: '2px solid #333' }}>
                 <th style={{ padding: 8 }}>Mã thiết bị</th>
-                <th style={{ padding: 8 }}>Tên máy (nguồn gốc)</th>
-                <th style={{ padding: 8 }}>Loại</th>
-                <th style={{ padding: 8 }}>Bưu cục</th>
-                <th style={{ padding: 8 }}>Tình trạng</th>
-                <th style={{ padding: 8 }}>IP</th>
                 <th style={{ padding: 8 }}>Mã BĐT/TP</th>
                 <th style={{ padding: 8 }}>Tên BĐT/TP</th>
-                <th style={{ padding: 8 }}>Mã BĐKV</th>
+                <th style={{ padding: 8 }}>Mã MBC</th>
+                <th style={{ padding: 8 }}>Tên bưu cục</th>
                 <th style={{ padding: 8 }}>Mã BĐX</th>
-                <th style={{ padding: 8 }}>Bưu điện xã trung tâm</th>
-                <th style={{ padding: 8 }}>Loại điểm</th>
                 <th style={{ padding: 8 }}>Tên Bưu điện xã</th>
+                <th style={{ padding: 8 }}>Loại</th>
+                <th style={{ padding: 8 }}>IP</th>
+                <th style={{ padding: 8 }}>Tên máy</th>
+                <th style={{ padding: 8 }}>Địa chỉ MAC</th>
+                <th style={{ padding: 8 }}>Loại máy</th>
+                <th style={{ padding: 8 }}>Hãng</th>
+                <th style={{ padding: 8 }}>Model</th>
                 <th style={{ padding: 8 }}></th>
               </tr>
             </thead>
@@ -187,55 +249,88 @@ export default function AssetsPage() {
                 <Fragment key={a.id}>
                   <tr style={{ borderBottom: '1px solid #eee' }}>
                     <td style={{ padding: 8, fontFamily: 'monospace' }}>{a.assetTag}</td>
-                    <td style={{ padding: 8 }}>{a.notes ?? a.name}</td>
-                    <td style={{ padding: 8 }}>{a.category.name}</td>
-                    <td style={{ padding: 8 }}>{a.site?.name ?? '-'}</td>
-                    <td style={{ padding: 8 }}>{OPERATING_STATUS_LABEL[a.operatingStatus] ?? a.operatingStatus}</td>
-                    <td style={{ padding: 8, fontFamily: 'monospace' }}>{a.ipAddress ?? '-'}</td>
                     <td style={{ padding: 8 }}>{a.site?.provinceCode ?? '-'}</td>
                     <td style={{ padding: 8 }}>{a.site?.provinceName ?? '-'}</td>
-                    <td style={{ padding: 8 }}>{a.site?.regionCode ?? '-'}</td>
+                    <td style={{ padding: 8 }}>{a.site?.code ?? '-'}</td>
+                    <td style={{ padding: 8 }}>{a.site?.name ?? '-'}</td>
                     <td style={{ padding: 8 }}>{a.site?.wardCode ?? '-'}</td>
-                    <td style={{ padding: 8 }}>{a.site?.centralWardName ?? '-'}</td>
-                    <td style={{ padding: 8 }}>{a.site?.pointType ?? '-'}</td>
                     <td style={{ padding: 8 }}>{a.site?.wardName ?? '-'}</td>
+                    <td style={{ padding: 8 }}>{a.site?.pointType ?? '-'}</td>
+                    <td style={{ padding: 8, fontFamily: 'monospace' }}>{a.ipAddress ?? '-'}</td>
+                    <td style={{ padding: 8 }}>{extractTenMay(a.notes)}</td>
+                    <td style={{ padding: 8, fontFamily: 'monospace' }}>{a.macAddress ?? '-'}</td>
+                    <td style={{ padding: 8 }}>{a.category.name}</td>
+                    <td style={{ padding: 8 }}>{a.manufacturer ?? '-'}</td>
+                    <td style={{ padding: 8 }}>{a.model ?? '-'}</td>
                     <td style={{ padding: 8 }}>
-                      <button onClick={() => setExpandedId(expandedId === a.id ? null : a.id)}>
-                        {expandedId === a.id ? 'Ẩn' : 'Chi tiết'}
-                      </button>
+                      <button onClick={() => toggleExpand(a.id)}>{expandedId === a.id ? 'Ẩn' : 'Chi tiết'}</button>
                     </td>
                   </tr>
                   {expandedId === a.id && (
                     <tr key={`${a.id}-detail`} style={{ background: '#fafafa' }}>
-                      <td colSpan={14} style={{ padding: 12 }}>
+                      <td colSpan={15} style={{ padding: 12 }}>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, fontSize: 14 }}>
+                          {/* Nhóm A - mọi role */}
                           <div>
-                            <strong>Hãng / Model:</strong> {a.manufacturer ?? '-'} / {a.model ?? '-'}
+                            <strong>Serial Number/TAG:</strong> {a.serialNumber ?? '-'}
                           </div>
                           <div>
-                            <strong>Serial:</strong> {a.serialNumber ?? '-'}
+                            <strong>Hệ điều hành:</strong> {a.specs?.os ?? '-'}
                           </div>
                           <div>
-                            <strong>MAC:</strong> {a.macAddress ?? '-'}
+                            <strong>CPU:</strong> {a.specs?.cpu ?? '-'}
+                          </div>
+                          <div>
+                            <strong>RAM:</strong> {a.specs?.ram ?? '-'}
+                          </div>
+                          <div>
+                            <strong>Ổ cứng:</strong> {a.specs?.storage ?? '-'}
                           </div>
                           <div>
                             <strong>Người sử dụng:</strong> {a.currentUser ?? '-'}
                           </div>
                           <div>
-                            <strong>Sở hữu:</strong> {a.ownershipStatus}
+                            <strong>Mã BĐKV:</strong> {a.site?.regionCode ?? '-'}
                           </div>
                           <div>
-                            <strong>Địa chỉ bưu cục:</strong> {a.site?.address ?? '-'}
+                            <strong>Tên BĐKV:</strong> {a.site?.regionName ?? '-'}
                           </div>
-                          {a.specs && (
-                            <div style={{ gridColumn: '1 / -1' }}>
-                              <strong>Cấu hình:</strong>{' '}
-                              {Object.entries(a.specs)
-                                .map(([k, v]) => `${k}: ${v}`)
-                                .join(' · ')}
-                            </div>
-                          )}
+                          <div>
+                            <strong>Bưu điện xã trung tâm:</strong> {a.site?.centralWardName ?? '-'}
+                          </div>
+                          <div>
+                            <strong>Địa chỉ chi tiết:</strong> {a.site?.address ?? '-'}
+                          </div>
                         </div>
+
+                        {/* Nhóm B - CHỈ IT_ADMIN (CRED-04 phương án A): role khác không
+                            thấy dòng nào ở đây, kể cả tiêu đề nhóm - ẩn hoàn toàn. */}
+                        {isItAdmin && (
+                          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #ccc' }}>
+                            <strong style={{ display: 'block', marginBottom: 8 }}>VPN / FortiClient</strong>
+                            {credState?.status === 'loading' && <p>Đang tải...</p>}
+                            {credState?.status === 'error' && (
+                              <p style={{ color: '#900' }}>Không tải được: {credState.message}</p>
+                            )}
+                            {credState?.status === 'none' && <p>Chưa cấu hình VPN/FortiClient</p>}
+                            {credState?.status === 'ready' && (
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, fontSize: 14 }}>
+                                <div>
+                                  <strong>User VPN:</strong> {credState.data.vpnUsername ?? '-'}
+                                </div>
+                                <div>
+                                  <strong>Password VPN:</strong> {credState.data.vpnPassword ?? '-'}
+                                </div>
+                                <div>
+                                  <strong>User FortiClient:</strong> {credState.data.fortiClientUsername ?? '-'}
+                                </div>
+                                <div>
+                                  <strong>Password FortiClient:</strong> {credState.data.fortiClientPassword ?? '-'}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )}
