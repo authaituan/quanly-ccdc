@@ -1,17 +1,23 @@
 /**
  * FE-02: trang danh sách thiết bị thật, thay PlaceholderPage.
+ * FE-03 (2026-08-10): giờ đã có auth - request đính kèm
+ * Authorization: Bearer <token>, 401 -> clearSession() + redirect /login
+ * (xem lib/auth.ts). Route này được bọc bởi <RequireAuth> ở App.tsx nên
+ * không thể mount nếu chưa có token, nhưng backend vẫn là nguồn sự thật
+ * cuối cùng cho việc token còn hợp lệ hay không (token hết hạn giữa
+ * phiên vẫn phải bị BE từ chối, không chỉ dựa vào việc FE thấy có token).
  *
- * Lưu ý bảo mật (xem PROJECT_STATUS.md): trang này KHÔNG có auth. Backend
- * GET /assets trả về toàn bộ scalar field của ItAsset, bao gồm cả
- * `currentUser` (dữ liệu cá nhân) - trang này CỐ Ý không hiển thị
- * currentUser trên bảng tổng, chỉ hiện khi người dùng chủ động mở chi
- * tiết 1 dòng (expand). Không sửa gì ở backend trong phase này.
+ * Lưu ý bảo mật cũ (vẫn còn đúng): `currentUser` (dữ liệu cá nhân) CỐ Ý
+ * không hiển thị trên bảng tổng, chỉ hiện khi người dùng chủ động mở chi
+ * tiết 1 dòng (expand).
  *
  * Gọi thẳng http://localhost:3000 (không qua proxy /api của vite.config.ts
  * - proxy đó trỏ đúng host nhưng backend không có prefix /api nên không
  * dùng được nguyên trạng; xem PROJECT_STATUS.md phase FE-02 để biết lý do).
  */
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { clearSession, getToken, getUser } from '../lib/auth';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -57,16 +63,32 @@ const OPERATING_STATUS_LABEL: Record<string, string> = {
 };
 
 export default function AssetsPage() {
+  const navigate = useNavigate();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [query, setQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const user = getUser();
+
+  function handleLogout() {
+    clearSession();
+    navigate('/login', { replace: true });
+  }
 
   useEffect(() => {
     let cancelled = false;
     setState({ status: 'loading' });
 
-    fetch(`${API_BASE}/assets`)
+    fetch(`${API_BASE}/assets`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
       .then((res) => {
+        if (res.status === 401) {
+          // Quyết định 2b: token hết hạn/không hợp lệ -> xóa session,
+          // redirect /login ngay, không chỉ hiện lỗi trên trang.
+          clearSession();
+          navigate('/login', { replace: true });
+          throw new Error('__redirecting__'); // chặn .then tiếp theo, không set state lỗi thừa
+        }
         if (!res.ok) throw new Error(`Backend trả về HTTP ${res.status}`);
         return res.json() as Promise<ItAssetDto[]>;
       })
@@ -74,7 +96,7 @@ export default function AssetsPage() {
         if (!cancelled) setState({ status: 'ready', assets });
       })
       .catch((err: unknown) => {
-        if (cancelled) return;
+        if (cancelled || (err instanceof Error && err.message === '__redirecting__')) return;
         const message =
           err instanceof TypeError
             ? `Không kết nối được tới backend (${API_BASE}). Kiểm tra backend đã chạy (npm run start:dev) và không bị chặn CORS.`
@@ -87,7 +109,7 @@ export default function AssetsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [navigate]);
 
   const filtered = useMemo(() => {
     if (state.status !== 'ready') return [];
@@ -100,7 +122,17 @@ export default function AssetsPage() {
 
   return (
     <div style={{ padding: 24, fontFamily: 'system-ui' }}>
-      <h1>Danh sách thiết bị CNTT</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1>Danh sách thiết bị CNTT</h1>
+        {user && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14 }}>
+            <span>
+              {user.fullName} <span style={{ color: '#666' }}>({user.role})</span>
+            </span>
+            <button onClick={handleLogout}>Đăng xuất</button>
+          </div>
+        )}
+      </div>
 
       <input
         type="text"
