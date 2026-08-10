@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { AssetsService } from './assets.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
+import { UpdateAssetDto } from './dto/update-asset.dto';
 
 @Controller('assets')
 export class AssetsController {
@@ -30,5 +31,18 @@ export class AssetsController {
   @Post()
   create(@Body() dto: CreateAssetDto) {
     return this.assetsService.create(dto);
+  }
+
+  // AST-04
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateAssetDto) {
+    return this.assetsService.update(id, dto);
+  }
+
+  // AST-05: soft delete - chuyển operatingStatus sang DECOMMISSIONED,
+  // KHÔNG xóa dòng khỏi DB (quyết định 2026-08-10, xem assets.service.ts).
+  @Delete(':id')
+  decommission(@Param('id') id: string) {
+    return this.assetsService.decommission(id);
   }
 }

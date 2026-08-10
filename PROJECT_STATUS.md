@@ -10,9 +10,9 @@
 ```yaml
 repo: authaituan/quanly-ccdc
 branch: feature/scaffold-phase1
-commit_hash: 2ad8953650dd6ab9aeb1cc1c8a44b4dd177b8c2f
-commit_date: 2026-08-10T17:10:32+07:00
-audit_date: 2026-08-10T17:20:00+07:00
+commit_hash: 3857f890ea70f7932004face8a99983eab82fbf9
+commit_date: 2026-08-10T20:55:45+07:00
+audit_date: 2026-08-10T21:15:00+07:00
 auditor: Claude (Technical Auditor role, per project operating constitution)
 ```
 
@@ -37,7 +37,9 @@ auditor: Claude (Technical Auditor role, per project operating constitution)
 | Migration áp dụng vào DB thật | ✅ Đã chạy (2 migration) | `backend/prisma/migrations/`: `20260810085140_init`, `20260810094730_add_book1_import_fields`. Re-verify `npx prisma migrate status` → "Database schema is up to date!" |
 | Seed taxonomy | ✅ Đã chạy | `backend/prisma/seed.ts`; output thật "Seeded 29 asset categories" (28 gốc + `UNCLASSIFIED`). Query thật `SELECT count(*) FROM asset_categories` → 29 |
 | **OPS-02 — Import Book1.xlsx (Merge1) vào DB** | ✅ **Đã hoàn thành** | Script: `backend/prisma/import-book1.ts` (dry-run mặc định, `--commit` để ghi thật). Kết quả thật (query `psql` độc lập, không chỉ dựa vào log script): `SELECT count(*) FROM sites` → **206**; `SELECT count(*) FROM it_assets` → **359**; theo category: `PC_DESKTOP`=286, `UNCLASSIFIED`=73; `serialNumber` distinct=non-null=255 (không trùng); `network_access_credentials` = 0 dòng (xem rủi ro #4 bên dưới). Commit `2ad8953`. |
-| Module `assets` — 5 route | ✅ Có code, ❌ chưa test runtime | `backend/src/modules/assets/assets.controller.ts`: `GET /assets`(9), `GET /assets/expiring-soon`(14), `GET /assets/by-tag/:assetTag`(19), `GET /assets/:id`(25), `POST /assets`(30) |
+| **AST-04 — `PATCH /assets/:id`** | ✅ **Đã hoàn thành**, verify runtime thật | `backend/src/modules/assets/assets.controller.ts` (`update()`), `assets.service.ts` (`update()` + `assertCategoryExists`/`assertSiteExists`/`assertAssetTagAvailable`/`assertSerialNumberAvailable`), `dto/update-asset.dto.ts` (`PartialType(CreateAssetDto)`, cần thêm dependency `@nestjs/mapped-types`). Cho sửa mọi field kể cả `assetTag`/`serialNumber` (unique), validate FK + unique thủ công trước khi ghi (quyết định 2026-08-10). Verify thật bằng curl vào server đang chạy: PATCH field hợp lệ → 200 + data đúng; PATCH `categoryId` không tồn tại → **400** `"categoryId ... không tồn tại"`; PATCH `assetTag` trùng → **409** `"assetTag ... đã tồn tại"`. |
+| **AST-05 — `DELETE /assets/:id` (soft delete)** | ✅ **Đã hoàn thành**, verify runtime thật | `assets.service.ts` (`decommission()`) — **không xóa dòng khỏi `it_assets`**, chỉ chuyển `operatingStatus` sang `DECOMMISSIONED` (quyết định 2026-08-10: đây là hệ thống quản lý tài sản, không được mất lịch sử kiểm toán). Verify thật: DELETE 1 asset thật → `SELECT count(*) FROM it_assets` vẫn = **359** (không giảm), dòng đó có `operatingStatus='DECOMMISSIONED'` xác nhận qua `psql` độc lập. DELETE id không tồn tại → **404**. |
+| Module `assets` — 7 route | ✅ Có code, ✅ **GET/PATCH/DELETE đã test runtime thật qua curl** (xem AST-04/AST-05); `POST` chưa test runtime, chỉ build | `backend/src/modules/assets/assets.controller.ts`: `GET /assets`, `GET /assets/expiring-soon`, `GET /assets/by-tag/:assetTag`, `GET /assets/:id`, `POST /assets`, `PATCH /assets/:id`, `DELETE /assets/:id` (soft delete) |
 | Module `sites` — 2 route | ✅ Có code, ❌ chưa test runtime | `backend/src/modules/sites/sites.controller.ts`: `GET /sites`(8), `GET /sites/:id`(13) |
 | Module `credentials` — mã hóa VPN/FortiClient | ⚠️ Service xong, **không có route HTTP** | `backend/src/modules/credentials/credentials.service.ts`: `upsert()`(28), `reveal()`(54); `backend/src/modules/credentials/credentials.module.ts` — không import `AssetsController`-style controller, comment dòng 6-8 giải thích lý do (chờ module `auth`) |
 | Mã hóa AES-256-GCM | ✅ Có code, chưa có unit test | `backend/src/common/crypto/encryption.service.ts` |
