@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
 
@@ -47,7 +48,15 @@ export class AssetsService {
   }
 
   create(dto: CreateAssetDto) {
-    return this.prisma.itAsset.create({ data: dto });
+    // `specs` is a free-form JSON column; Prisma's generated input type wants
+    // its exact JsonValue union, not our loosely-typed DTO shape.
+    const { specs, ...rest } = dto;
+    return this.prisma.itAsset.create({
+      data: {
+        ...rest,
+        specs: specs as Prisma.InputJsonValue | undefined,
+      },
+    });
   }
 
   /**
