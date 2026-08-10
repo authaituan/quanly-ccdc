@@ -10,9 +10,9 @@
 ```yaml
 repo: authaituan/quanly-ccdc
 branch: feature/scaffold-phase1
-commit_hash: e4bf6e3270dc35821266caf2fa003f50372c49fd
-commit_date: 2026-08-10T21:26:06+07:00
-audit_date: 2026-08-10T22:10:00+07:00
+commit_hash: d4a6484d7efad38b8c67ebbfdc27dfec2423b7dc
+commit_date: 2026-08-10T22:02:03+07:00
+audit_date: 2026-08-10T22:35:00+07:00
 auditor: Claude (Technical Auditor role, per project operating constitution)
 ```
 
@@ -44,7 +44,7 @@ auditor: Claude (Technical Auditor role, per project operating constitution)
 | Seed tài khoản `IT_ADMIN` đầu tiên | ✅ Đã chạy | `backend/prisma/seed.ts` (`seedFirstAdmin`) — chỉ chạy nếu bảng `users` rỗng, đọc `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` từ env, **throw lỗi và dừng nếu thiếu** (không tự sinh password ngẫu nhiên). Query thật xác nhận: 1 user `admin@quanly-ccdc.local`, role `IT_ADMIN`, `active=true`. Re-chạy seed lần 2 xác nhận skip đúng (không tạo trùng). |
 | Module `assets` — 7 route, **có JWT + RBAC guard** | ✅ Có code, ✅ Đã test runtime thật đầy đủ (không token → 401, sai role → 403, đúng role → 200/201) | `backend/src/modules/assets/assets.controller.ts`: `GET /assets`, `GET /assets/expiring-soon`, `GET /assets/by-tag/:assetTag`, `GET /assets/:id`, `POST /assets`, `PATCH /assets/:id`, `DELETE /assets/:id` (soft delete) |
 | Module `sites` — 2 route, **có JWT guard** | ✅ Có code, ✅ Test runtime thật (không token → 401, có token → 200) | `backend/src/modules/sites/sites.controller.ts`: `GET /sites`, `GET /sites/:id` |
-| Module `credentials` — mã hóa VPN/FortiClient | ⚠️ Service xong, **vẫn không có route HTTP** | `backend/src/modules/credentials/credentials.service.ts`: `upsert()`(28), `reveal()`(54). `auth` module giờ đã tồn tại (AUTH-01/02 xong) nhưng **route cho credentials vẫn chưa được nối** trong phase này — ngoài phạm vi AUTH-01/02, để phase riêng. |
+| **CRED-02/03/04 — `POST`/`GET /assets/:assetId/credentials`** | ✅ **Đã hoàn thành**, verify runtime thật đầy đủ | `backend/src/modules/credentials/credentials.controller.ts` (mới), `credentials.module.ts` (đã nối controller + import `AuthModule`), `dto/upsert-credentials.dto.ts` (mới). Cả 2 route `@UseGuards(JwtAuthGuard, RolesGuard)` + `@Roles(UserRole.IT_ADMIN)` — 2 lớp bảo vệ (route-level RolesGuard + `assertIsAdmin()` ở tầng service, có sẵn từ trước). Verify thật qua curl: không token → **401**; token STAFF (cả POST và GET) → **403**; token IT_ADMIN `POST` → **201**, xác nhận DB lưu **mã hóa** (không plaintext) qua query `psql` độc lập; token IT_ADMIN `GET` → **200**, giải mã đúng 100% đối chiếu với giá trị gốc (verify bằng so sánh chuỗi trong script test, không paste plaintext ra chat/log). Dữ liệu test đã dọn sạch sau verify (`network_access_credentials`=0, `users`=1). |
 | Mã hóa AES-256-GCM | ✅ Có code, chưa có unit test | `backend/src/common/crypto/encryption.service.ts` |
 | **Module `auth` (JWT/RolesGuard)** | ✅ **Đã hoàn thành** | `backend/src/modules/auth/`: `auth.module.ts`, `auth.controller.ts`, `auth.service.ts`, `jwt.strategy.ts`, `jwt-auth.guard.ts`, `roles.guard.ts`, `roles.decorator.ts`, `dto/login.dto.ts`. Import vào `app.module.ts`. |
 | Module `assignments`, `maintenance`, `software-licenses`, `users` | ❌ Chưa tồn tại (chỉ có model DB, chưa có controller/service) | Không có thư mục tương ứng trong `backend/src/modules/`; các model `EndUserAssignment`, `MaintenanceLog`, `SoftwareLicenseLink`, `User` chỉ tồn tại ở tầng schema |
@@ -61,7 +61,7 @@ auditor: Claude (Technical Auditor role, per project operating constitution)
 
 ## Rủi ro / lệch hướng đã ghi nhận
 
-1. **`credentials` module vẫn không có route** — `auth` module đã xong (AUTH-01/02), nên rào cản kỹ thuật trước đây đã hết, nhưng route thật cho VPN/FortiClient vẫn **chưa được viết** trong bất kỳ phase nào tới giờ. Nếu ai đó tự thêm controller sau này, nhớ áp `@Roles(UserRole.IT_ADMIN)` — đã có sẵn `RolesGuard`/`@Roles` dùng được ngay.
+1. **✅ RESOLVED — `credentials` module giờ có route thật (CRED-02/03/04, 2026-08-10)**, chỉ `IT_ADMIN`, verify runtime đầy đủ (401/403/201/200 đúng theo từng vai trò, mã hóa DB xác nhận). Không còn là rủi ro treo.
 2. **4 cột User VPN / Password VPN / User FortiClient / Password FortiClient trong Book1.xlsx bị bỏ qua hoàn toàn khi import (quyết định có chủ đích, đã duyệt 2026-08-10)** — `import-book1.ts` không đọc, không lưu 4 cột này dưới bất kỳ hình thức nào (xác nhận thật: `network_access_credentials` = 0 dòng). Dữ liệu VPN/FortiClient thật của 359 thiết bị **hiện không tồn tại ở đâu trong hệ thống mới**.
 3. **Cột "Loại" (GD3/VHX/GD1/VP/GD2/PH2/PH1) và các field site khác vẫn cần dọn tay** — `Site.pointType`, `wardCode`, `wardName`, `centralWardName` được import nguyên trạng từ Excel, chưa chuẩn hóa/đối chiếu nghiệp vụ. Riêng site `531130` (VP BĐ Thành Phố Huế) có `wardName = NULL` do xung đột dữ liệu thật.
 4. **73/359 `ItAsset` đang mang category `UNCLASSIFIED`** (thiếu "Loại máy" hoặc ghi "Không có máy tính" trong Excel gốc) — cần người dùng tự phân loại lại thủ công sau.
