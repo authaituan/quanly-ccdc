@@ -8,11 +8,14 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 import { AssignmentsModule } from './modules/assignments/assignments.module';
+import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { LicensesModule } from './modules/licenses/licenses.module';
 
-// NOTE (phase discipline): maintenance / software-licenses modules are
-// intentionally not scaffolded yet. AuthModule (AUTH-01, AUTH-02) added
-// 2026-08-10. UsersModule (USER-01) added 2026-08-11. EmployeesModule +
-// AssignmentsModule (ASSIGN-01) added 2026-08-11.
+// NOTE (phase discipline): AuthModule (AUTH-01, AUTH-02) added 2026-08-10.
+// UsersModule (USER-01) added 2026-08-11. EmployeesModule + AssignmentsModule
+// (ASSIGN-01) added 2026-08-11. MaintenanceModule (MAINT-01) + LicensesModule
+// (LIC-01) added 2026-08-11 - last 2 backend modules with only a DB table
+// and no route are now done.
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -24,6 +27,8 @@ import { AssignmentsModule } from './modules/assignments/assignments.module';
     UsersModule,
     EmployeesModule,
     AssignmentsModule,
+    MaintenanceModule,
+    LicensesModule,
   ],
 })
 export class AppModule {}
