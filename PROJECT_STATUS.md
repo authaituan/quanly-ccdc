@@ -10,9 +10,9 @@
 ```yaml
 repo: authaituan/quanly-ccdc
 branch: feature/scaffold-phase1
-commit_hash: bf436a429e6b75f0d6862ca8c57a38917beede1d
-commit_date: 2026-08-10T22:27:28+07:00
-audit_date: 2026-08-10T23:15:00+07:00
+commit_hash: 570f3636d83d5ba47e5bf059b78106de380c73d0
+commit_date: 2026-08-10T22:52:27+07:00
+audit_date: 2026-08-11T00:05:00+07:00
 auditor: Claude (Technical Auditor role, per project operating constitution)
 ```
 
@@ -20,10 +20,10 @@ auditor: Claude (Technical Auditor role, per project operating constitution)
 
 | Ưu tiên | Nguồn | Trạng thái tại thời điểm audit |
 |---|---|---|
-| 1. Runtime | `npm run start:dev` chưa được chạy thành công trong bất kỳ phiên nào — **không có bằng chứng runtime**. Chỉ có `npx nest build` (compile-time) đã pass. | Chưa audit được |
+| 1. Runtime | `npm run start:dev` (backend) + `npm run dev` (frontend) đã chạy thật và được verify qua nhiều phiên liên tiếp (FE-02, AST-04/05, AUTH-01/02, FE-03, CRED-02/03/04) bằng curl và browser thật — **có bằng chứng runtime**. | Đã audit thật — xem bảng bên dưới |
 | 2. Database | PostgreSQL 17 local (`postgresql-x64-17` service), DB `quanly_ccdc` | Đã audit thật — xem bảng bên dưới |
-| 3. Source code GitHub | Nhánh `feature/scaffold-phase1`, commit `2ad8953` | Đã audit thật — xem bảng bên dưới |
-| 4. Commit history | 4 commit: `ba91f3e` (scaffold), `749615e` (fix build error), `291b277` (PROJECT_STATUS.md), `2ad8953` (import Book1.xlsx) | Đã đọc |
+| 3. Source code GitHub | Nhánh `feature/scaffold-phase1`, commit `570f363` | Đã audit thật — xem bảng bên dưới |
+| 4. Commit history | Xem `git log` trực tiếp để có danh sách đầy đủ, chính xác tại thời điểm đọc — không liệt kê tay từng commit ở đây nữa (dễ lỗi thời, đã từng gây mâu thuẫn thật trong file này) | Đã đọc |
 | 5. Prompt mô tả | Chat trước đó | Thấp nhất, không dùng làm evidence |
 
 ## Bảng tiến độ
