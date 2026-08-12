@@ -23,6 +23,7 @@ import AssetFormModal, {
   type AssetFormValues,
   type SiteOptionDto,
 } from '../components/AssetFormModal';
+import CredentialsFormModal, { type CredentialsFormValues } from '../components/CredentialsFormModal';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -105,6 +106,11 @@ export default function AssetsPage() {
   // CRED-04 (phương án A): chỉ IT_ADMIN mới lazy-load VPN/Forti, chỉ khi
   // mở rộng đúng dòng đó - không gọi trước cho toàn bộ danh sách.
   const [credState, setCredState] = useState<CredState | null>(null);
+  // FE-07: modal nhập/sửa VPN-FortiClient. credModalAssetId = id asset đang
+  // mở form (null = đóng). Chỉ mở được khi đã có credState (reveal xong).
+  const [credModalAssetId, setCredModalAssetId] = useState<string | null>(null);
+  const [credFormSubmitting, setCredFormSubmitting] = useState(false);
+  const [credFormError, setCredFormError] = useState<string | null>(null);
   const user = getUser();
   const isItAdmin = user?.role === 'IT_ADMIN';
   // AST-04/AUTH-02: POST/PATCH /assets cho phép IT_ADMIN + WAREHOUSE_MANAGER,
@@ -321,6 +327,76 @@ export default function AssetsPage() {
     }
   }
 
+  // FE-07: chỉ mở được khi credState đã 'none' hoặc 'ready' (reveal xong) -
+  // nút gọi hàm này chỉ hiện trong 2 trường hợp đó, xem JSX bên dưới.
+  function openCredModal(assetId: string) {
+    setCredFormError(null);
+    setCredModalAssetId(assetId);
+  }
+
+  function closeCredModal() {
+    setCredModalAssetId(null);
+    setCredFormError(null);
+  }
+
+  async function handleCredFormSubmit(values: CredentialsFormValues) {
+    if (!credModalAssetId) return;
+    setCredFormSubmitting(true);
+    setCredFormError(null);
+    try {
+      // Field rỗng -> undefined: backend upsert bỏ qua field undefined (giữ
+      // nguyên giá trị cũ), không xóa được field qua chuỗi rỗng (hành vi
+      // sẵn có của CredentialsService.upsert, không đổi ở phase này).
+      const opt = (v: string) => (v.trim() === '' ? undefined : v);
+      const payload = {
+        vpnUsername: opt(values.vpnUsername),
+        vpnPassword: opt(values.vpnPassword),
+        fortiClientUsername: opt(values.fortiClientUsername),
+        fortiClientPassword: opt(values.fortiClientPassword),
+      };
+      const res = await fetch(`${API_BASE}/assets/${credModalAssetId}/credentials`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload),
+      });
+      if (res.status === 401) {
+        clearSession();
+        navigate('/login', { replace: true });
+        return;
+      }
+      const text = await res.text();
+      const body = text ? JSON.parse(text) : null;
+      if (!res.ok) {
+        const message = Array.isArray(body?.message) ? body.message.join(', ') : (body?.message ?? `HTTP ${res.status}`);
+        setCredFormError(message);
+        return;
+      }
+      // 2c: cập nhật Nhóm B tại chỗ bằng giá trị vừa submit, không gọi lại
+      // reveal - response POST không trả plaintext giải mã (chỉ record đã
+      // mã hóa). Field bị bỏ trống KHÔNG bị xóa ở backend (giữ nguyên giá
+      // trị cũ, xem CredentialsService.upsert) - nên state hiển thị cũng
+      // phải giữ giá trị cũ cho field đó, không được hiện "-" sai thực tế.
+      setCredState((prev) => {
+        const prevData = prev?.status === 'ready' ? prev.data : null;
+        const merge = (submitted: string, prevVal: string | null) => (submitted.trim() !== '' ? submitted : prevVal);
+        return {
+          status: 'ready',
+          data: {
+            vpnUsername: merge(values.vpnUsername, prevData?.vpnUsername ?? null),
+            vpnPassword: merge(values.vpnPassword, prevData?.vpnPassword ?? null),
+            fortiClientUsername: merge(values.fortiClientUsername, prevData?.fortiClientUsername ?? null),
+            fortiClientPassword: merge(values.fortiClientPassword, prevData?.fortiClientPassword ?? null),
+          },
+        };
+      });
+      setCredModalAssetId(null);
+    } catch (err: unknown) {
+      setCredFormError(err instanceof Error ? err.message : 'Lỗi không xác định');
+    } finally {
+      setCredFormSubmitting(false);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
     setState({ status: 'loading' });
@@ -497,7 +573,17 @@ export default function AssetsPage() {
                             thấy dòng nào ở đây, kể cả tiêu đề nhóm - ẩn hoàn toàn. */}
                         {isItAdmin && (
                           <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #ccc' }}>
-                            <strong style={{ display: 'block', marginBottom: 8 }}>VPN / FortiClient</strong>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                              <strong>VPN / FortiClient</strong>
+                              {/* FE-07: chỉ hiện nút khi reveal đã xong ('none' hoặc 'ready') -
+                                  tránh mở form trước khi biết có credential cũ để điền sẵn hay không. */}
+                              {credState?.status === 'none' && (
+                                <button onClick={() => openCredModal(a.id)}>Thêm VPN/Forti</button>
+                              )}
+                              {credState?.status === 'ready' && (
+                                <button onClick={() => openCredModal(a.id)}>Sửa VPN/Forti</button>
+                              )}
+                            </div>
                             {credState?.status === 'loading' && <p>Đang tải...</p>}
                             {credState?.status === 'error' && (
                               <p style={{ color: '#900' }}>Không tải được: {credState.message}</p>
@@ -543,6 +629,17 @@ export default function AssetsPage() {
           onClose={closeModal}
         />
       )}
+
+      {credModalAssetId && (
+        <CredentialsFormModal
+          mode={credState?.status === 'ready' ? 'edit' : 'create'}
+          initialValues={credState?.status === 'ready' ? credStateToFormValues(credState.data) : undefined}
+          submitting={credFormSubmitting}
+          errorMessage={credFormError}
+          onSubmit={handleCredFormSubmit}
+          onClose={closeCredModal}
+        />
+      )}
     </div>
   );
 }
@@ -560,5 +657,14 @@ function assetToFormValues(a: ItAssetDto): AssetFormValues {
     macAddress: a.macAddress ?? '',
     operatingStatus: a.operatingStatus,
     ownershipStatus: a.ownershipStatus,
+  };
+}
+
+function credStateToFormValues(data: CredentialsDto): CredentialsFormValues {
+  return {
+    vpnUsername: data.vpnUsername ?? '',
+    vpnPassword: data.vpnPassword ?? '',
+    fortiClientUsername: data.fortiClientUsername ?? '',
+    fortiClientPassword: data.fortiClientPassword ?? '',
   };
 }
