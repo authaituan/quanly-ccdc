@@ -18,15 +18,22 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearSession, getToken, getUser } from '../lib/auth';
+import AssetFormModal, {
+  type AssetCategoryDto,
+  type AssetFormValues,
+  type SiteOptionDto,
+} from '../components/AssetFormModal';
 
 const API_BASE = 'http://localhost:3000';
 
 interface AssetCategory {
+  id: string;
   code: string;
   name: string;
 }
 
 interface Site {
+  id: string;
   code: string;
   name: string;
   address: string | null;
@@ -100,10 +107,181 @@ export default function AssetsPage() {
   const [credState, setCredState] = useState<CredState | null>(null);
   const user = getUser();
   const isItAdmin = user?.role === 'IT_ADMIN';
+  // AST-04/AUTH-02: POST/PATCH /assets cho phép IT_ADMIN + WAREHOUSE_MANAGER,
+  // DELETE (thanh lý) chỉ IT_ADMIN - khớp bảng phân quyền backend đã duyệt.
+  const canEditAsset = user?.role === 'IT_ADMIN' || user?.role === 'WAREHOUSE_MANAGER';
+
+  // FE-04: Tạo mới/Sửa asset. modal null = đóng; categories/sites nạp lười
+  // (chỉ khi mở modal lần đầu), dùng chung cho cả 2 chế độ.
+  const [categories, setCategories] = useState<AssetCategoryDto[]>([]);
+  const [sites, setSites] = useState<SiteOptionDto[]>([]);
+  const [optionsLoaded, setOptionsLoaded] = useState(false);
+  const [modal, setModal] = useState<
+    | null
+    | { mode: 'create' }
+    | { mode: 'edit'; asset: ItAssetDto }
+  >(null);
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   function handleLogout() {
     clearSession();
     navigate('/login', { replace: true });
+  }
+
+  function authHeaders(extra?: Record<string, string>) {
+    return { Authorization: `Bearer ${getToken()}`, ...extra };
+  }
+
+  async function ensureOptionsLoaded() {
+    if (optionsLoaded) return;
+    try {
+      const [catRes, siteRes] = await Promise.all([
+        fetch(`${API_BASE}/asset-categories`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/sites`, { headers: authHeaders() }),
+      ]);
+      if (catRes.status === 401 || siteRes.status === 401) {
+        clearSession();
+        navigate('/login', { replace: true });
+        return;
+      }
+      const cats = (await catRes.json()) as AssetCategoryDto[];
+      const siteList = (await siteRes.json()) as SiteOptionDto[];
+      setCategories(cats);
+      setSites(siteList);
+      setOptionsLoaded(true);
+    } catch {
+      setFormError('Không tải được danh sách Loại máy / Bưu cục.');
+    }
+  }
+
+  async function openCreateModal() {
+    setFormError(null);
+    await ensureOptionsLoaded();
+    setModal({ mode: 'create' });
+  }
+
+  async function openEditModal(asset: ItAssetDto) {
+    setFormError(null);
+    await ensureOptionsLoaded();
+    setModal({ mode: 'edit', asset });
+  }
+
+  function closeModal() {
+    setModal(null);
+    setFormError(null);
+  }
+
+  function toAssetTagPayload(values: AssetFormValues) {
+    // Field optional rỗng (chuỗi '') -> undefined, không gửi chuỗi rỗng cho
+    // backend (DTO @IsOptional @IsString chấp nhận thiếu field, không chấp
+    // nhận '' cho siteId FK).
+    const opt = (v: string) => (v.trim() === '' ? undefined : v.trim());
+    return {
+      assetTag: values.assetTag.trim(),
+      name: values.name.trim(),
+      categoryId: values.categoryId,
+      siteId: opt(values.siteId),
+      manufacturer: opt(values.manufacturer),
+      model: opt(values.model),
+      serialNumber: opt(values.serialNumber),
+      ipAddress: opt(values.ipAddress),
+      macAddress: opt(values.macAddress),
+      operatingStatus: values.operatingStatus,
+      ownershipStatus: values.ownershipStatus,
+    };
+  }
+
+  async function handleFormSubmit(values: AssetFormValues) {
+    if (!modal) return;
+    setFormSubmitting(true);
+    setFormError(null);
+    try {
+      const isCreate = modal.mode === 'create';
+      const url = isCreate ? `${API_BASE}/assets` : `${API_BASE}/assets/${modal.asset.id}`;
+      const res = await fetch(url, {
+        method: isCreate ? 'POST' : 'PATCH',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(toAssetTagPayload(values)),
+      });
+      if (res.status === 401) {
+        clearSession();
+        navigate('/login', { replace: true });
+        return;
+      }
+      const text = await res.text();
+      const body = text ? JSON.parse(text) : null;
+      if (!res.ok) {
+        // 400/409 backend trả {message: string}. Hiện đúng message backend,
+        // không tự chế message khác (quy tắc dự án).
+        const message = Array.isArray(body?.message) ? body.message.join(', ') : (body?.message ?? `HTTP ${res.status}`);
+        setFormError(message);
+        return;
+      }
+      // Bug thật phát hiện khi verify runtime (2026-08-11): response của
+      // POST/PATCH /assets KHÔNG include category/site lồng (chỉ có
+      // categoryId/siteId phẳng, xem assets.service.ts create()/update()) -
+      // chèn thẳng vào state làm crash render (a.category.name undefined).
+      // Fix: gọi GET /assets/:id (có include category+site đầy đủ) để lấy
+      // đúng 1 dòng hoàn chỉnh trước khi merge vào state (vẫn không gọi lại
+      // toàn bộ GET /assets, đúng thiết kế 2d đã duyệt).
+      const savedId = (body as { id: string }).id;
+      const full = await fetchAssetById(savedId);
+      setState((s) => {
+        if (s.status !== 'ready') return s;
+        if (isCreate) return { status: 'ready', assets: [...s.assets, full] };
+        return { status: 'ready', assets: s.assets.map((a) => (a.id === full.id ? full : a)) };
+      });
+      setModal(null);
+    } catch (err: unknown) {
+      setFormError(err instanceof Error ? err.message : 'Lỗi không xác định');
+    } finally {
+      setFormSubmitting(false);
+    }
+  }
+
+  async function handleDecommission(asset: ItAssetDto) {
+    if (!window.confirm(`Thanh lý thiết bị "${asset.assetTag}"? Thiết bị sẽ chuyển sang trạng thái DECOMMISSIONED.`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/assets/${asset.id}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      if (res.status === 401) {
+        clearSession();
+        navigate('/login', { replace: true });
+        return;
+      }
+      const text = await res.text();
+      const body = text ? JSON.parse(text) : null;
+      if (!res.ok) {
+        alert(body?.message ?? `HTTP ${res.status}`);
+        return;
+      }
+      // Cùng lý do như handleFormSubmit - DELETE /assets/:id (decommission)
+      // cũng trả asset phẳng, không có category/site lồng.
+      const updatedId = (body as { id: string }).id;
+      const full = await fetchAssetById(updatedId);
+      setState((s) => {
+        if (s.status !== 'ready') return s;
+        return { status: 'ready', assets: s.assets.map((a) => (a.id === full.id ? full : a)) };
+      });
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Lỗi không xác định');
+    }
+  }
+
+  async function fetchAssetById(id: string): Promise<ItAssetDto> {
+    const res = await fetch(`${API_BASE}/assets/${id}`, { headers: authHeaders() });
+    if (res.status === 401) {
+      clearSession();
+      navigate('/login', { replace: true });
+      throw new Error('__redirecting__');
+    }
+    if (!res.ok) throw new Error(`Backend trả về HTTP ${res.status}`);
+    return (await res.json()) as ItAssetDto;
   }
 
   async function toggleExpand(assetId: string) {
@@ -192,7 +370,10 @@ export default function AssetsPage() {
   return (
     <div style={{ padding: 24, fontFamily: 'system-ui' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1>Danh sách thiết bị CNTT</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h1 style={{ margin: 0 }}>Danh sách thiết bị CNTT</h1>
+          {canEditAsset && <button onClick={openCreateModal}>+ Thêm thiết bị</button>}
+        </div>
         {user && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14 }}>
             <span>
@@ -303,6 +484,15 @@ export default function AssetsPage() {
                           </div>
                         </div>
 
+                        {canEditAsset && (
+                          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+                            <button onClick={() => openEditModal(a)}>Sửa</button>
+                            {isItAdmin && a.operatingStatus !== 'DECOMMISSIONED' && (
+                              <button onClick={() => handleDecommission(a)}>Thanh lý</button>
+                            )}
+                          </div>
+                        )}
+
                         {/* Nhóm B - CHỈ IT_ADMIN (CRED-04 phương án A): role khác không
                             thấy dòng nào ở đây, kể cả tiêu đề nhóm - ẩn hoàn toàn. */}
                         {isItAdmin && (
@@ -340,6 +530,35 @@ export default function AssetsPage() {
           </table>
         </>
       )}
+
+      {modal && (
+        <AssetFormModal
+          mode={modal.mode}
+          categories={categories}
+          sites={sites}
+          initialValues={modal.mode === 'edit' ? assetToFormValues(modal.asset) : undefined}
+          submitting={formSubmitting}
+          errorMessage={formError}
+          onSubmit={handleFormSubmit}
+          onClose={closeModal}
+        />
+      )}
     </div>
   );
+}
+
+function assetToFormValues(a: ItAssetDto): AssetFormValues {
+  return {
+    assetTag: a.assetTag,
+    name: a.name,
+    categoryId: a.category.id,
+    siteId: a.site?.id ?? '',
+    manufacturer: a.manufacturer ?? '',
+    model: a.model ?? '',
+    serialNumber: a.serialNumber ?? '',
+    ipAddress: a.ipAddress ?? '',
+    macAddress: a.macAddress ?? '',
+    operatingStatus: a.operatingStatus,
+    ownershipStatus: a.ownershipStatus,
+  };
 }
