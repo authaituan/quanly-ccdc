@@ -16,10 +16,16 @@
  * công. Sửa bằng useLocation() (chỉ dùng để ép re-render mỗi lần route
  * đổi, không đọc giá trị của nó) để getUser() luôn được gọi lại mỗi khi
  * điều hướng.
+ *
+ * FE-06 (2026-08-12): thêm /assignments (bọc RequireAuth). Khác /users -
+ * GET /assignments không giới hạn role (mọi role đăng nhập xem được), nên
+ * link nav "Cấp phát" hiện không điều kiện role (giống /assets/sites/scan),
+ * chỉ nút ghi (Cấp phát/Thu hồi) trong trang mới ẩn theo role.
  */
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import AssetsPage from './pages/AssetsPage';
 import UsersPage from './pages/UsersPage';
+import AssignmentsPage from './pages/AssignmentsPage';
 import LoginPage from './pages/LoginPage';
 import RequireAuth from './components/RequireAuth';
 import { getUser } from './lib/auth';
@@ -44,6 +50,7 @@ export default function App() {
       <nav style={{ display: 'flex', gap: 16, padding: 16, borderBottom: '1px solid #ddd' }}>
         <Link to="/">Dashboard</Link>
         <Link to="/assets">Thiết bị</Link>
+        <Link to="/assignments">Cấp phát</Link>
         <Link to="/sites">Vị trí / Rack</Link>
         <Link to="/scan">Quét QR</Link>
         {user?.role === 'IT_ADMIN' && <Link to="/users">Tài khoản</Link>}
@@ -64,6 +71,14 @@ export default function App() {
           element={
             <RequireAuth>
               <UsersPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/assignments"
+          element={
+            <RequireAuth>
+              <AssignmentsPage />
             </RequireAuth>
           }
         />
